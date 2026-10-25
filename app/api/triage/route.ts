@@ -193,6 +193,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const {
       name,
+      patientName,
       age,
       gender,
       symptomText = '',
@@ -202,7 +203,10 @@ export async function POST(req: NextRequest) {
       vitals,
       extractedHistory = null,
       documentName,
+      reportedMedications = '',
     } = body;
+
+    const patientDisplayName = name || patientName || 'Patient';
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
@@ -227,7 +231,7 @@ export async function POST(req: NextRequest) {
     const gcsStr = vitals?.gcs && vitals.gcs !== 'N/A' ? String(vitals.gcs) : null;
 
     // ── Code-level Suspicious Input Check ────────────────────────
-    const combinedInput = `${symptomText} ${audioTranscript}`.trim();
+    const combinedInput = `${symptomText} ${audioTranscript} ${reportedMedications}`.trim();
     const injectionRegex = /(ignore\s+previous\s+instructions|system\s+prompt|mark\s+me\s+critical|bypass\s+triage|pretend\s+you\s+are)/i;
     const hasSuspiciousInput = injectionRegex.test(combinedInput);
 
@@ -291,8 +295,25 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Gemma 4 AI Prompt ─────────────────────────────────────────
-    const modelName = 'gemma-4-26b-a4b-it';
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+    // ── Run Code Rule Engine to Compute Baseline Safety Floor ───
+    const ruleEvaluation = calculateRulePriority(
+      symptomText,
+      audioTranscript,
+      vitals,
+      extractedHistory,
+      Number(age) || 40,
+      hasSuspiciousInput
+    );
+
+    // ── AI Triage Model Selection (Optimized for Sub-3s Response) ─
+    const requestedModel =
+      body.model ||
+      req.headers.get('x-triage-model') ||
+      process.env.TRIAGE_MODEL_NAME ||
+      'gemini-3.5-flash-lite';
+
+    // Prioritize fast responsive models; fall back to gemma or local safety engine
+    const candidateModels = Array.from(new Set([requestedModel, 'gemini-3.5-flash-lite', 'gemma-4-26b-a4b-it']));
 
     const prompt = `You are CareFlow AI, an intelligent clinical triage decision support assistant supporting licensed healthcare clinicians.
 
@@ -355,29 +376,68 @@ Return ONLY valid JSON inside a \`\`\`json code block conforming to this schema:
 }
 \`\`\``;
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.1,
-        },
-      }),
-    });
+    let validatedModelOutput: TriageModelResponse | null = null;
+    let modelUsed = requestedModel;
 
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error('Gemma API Error:', res.status, errText);
-      throw new Error(`Model API error (${res.status}): ${errText}`);
+    for (const mName of candidateModels) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${mName}:generateContent?key=${apiKey}`;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 6000); // 6s speed cap
+
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.1,
+              maxOutputTokens: 1024,
+            },
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+
+        if (res.ok) {
+          const data = await res.json();
+          const parts = data?.candidates?.[0]?.content?.parts || [];
+          const parsedJson = extractJsonFromParts(parts);
+          validatedModelOutput = TriageResponseSchema.parse(parsedJson);
+          modelUsed = mName;
+          break;
+        } else {
+          console.warn(`Model ${mName} returned status ${res.status}, checking fallback...`);
+        }
+      } catch (callErr: any) {
+        console.warn(`Model ${mName} timed out or failed (${callErr.message}), falling back...`);
+      }
     }
 
-    const data = await res.json();
-    const parts = data?.candidates?.[0]?.content?.parts || [];
-    const parsedJson = extractJsonFromParts(parts);
-
-    // Validate with Zod
-    const validatedModelOutput = TriageResponseSchema.parse(parsedJson);
+    // Safety fallback: if all remote calls failed or timed out, use rule engine synthesis
+    if (!validatedModelOutput) {
+      modelUsed = 'CareFlow Clinical Safety Engine';
+      const ruleUrgencyMap: Record<string, 'immediate' | 'urgent' | 'moderate' | 'low'> = {
+        EMERGENCY: 'immediate',
+        URGENT: 'urgent',
+        NEEDS_REVIEW: 'moderate',
+        ROUTINE: 'low',
+      };
+      validatedModelOutput = {
+        urgency_suggestion: ruleUrgencyMap[ruleEvaluation.ruleCategory] || 'moderate',
+        reasons: ruleEvaluation.ruleReasons,
+        flags: codeFlags,
+        followup_questions: [
+          'What was the exact time and context of symptom onset?',
+          'Are there any associated symptoms like diaphoresis, dizziness, or radiation?',
+        ],
+        first_aid_steps: ruleEvaluation.ruleCategory === 'EMERGENCY'
+          ? ['Call emergency medical services (112) immediately.', 'Keep patient seated comfortably and ensure open airway.']
+          : ['Maintain resting position and monitor vitals closely pending physician review.'],
+        summary: `Clinical screening synthesis based on observed symptoms: "${symptomText.slice(0, 100)}" and intake indicators.`,
+        uncertainty_notes: isVitalsEmpty ? ['Vitals not measured at intake; avoid assuming normal parameters.'] : [],
+      };
+    }
 
     // ── Drop any reason without a valid source ────────────────────
     const validReasons = validatedModelOutput.reasons.filter(
@@ -394,16 +454,6 @@ Return ONLY valid JSON inside a \`\`\`json code block conforming to this schema:
         combinedFlags.push(mf);
       }
     }
-
-    // ── Run Code Rule Engine to Compute Final Priority Score ──────
-    const ruleEvaluation = calculateRulePriority(
-      symptomText,
-      audioTranscript,
-      vitals,
-      extractedHistory,
-      Number(age) || 40,
-      hasSuspiciousInput
-    );
 
     // Merge rule reasons into valid reasons
     for (const rr of ruleEvaluation.ruleReasons) {
@@ -461,7 +511,28 @@ Return ONLY valid JSON inside a \`\`\`json code block conforming to this schema:
       });
     });
 
+    const responsePayload = {
+      urgency_suggestion: validatedModelOutput.urgency_suggestion,
+      provisionalCategory: finalCategory,
+      priorityScore: ruleEvaluation.priorityScore,
+      reasons: validReasons,
+      flags: combinedFlags,
+      signalFlags: combinedFlags,
+      warningFlags: warningFlags,
+      followup_questions: validatedModelOutput.followup_questions || [],
+      suggestedFollowUpQuestions: validatedModelOutput.followup_questions || [],
+      first_aid_steps: firstAid,
+      summary: validatedModelOutput.summary,
+      uncertainty_notes: validatedModelOutput.uncertainty_notes || [],
+      detectedLanguage: originalLanguage,
+    };
 
+    return NextResponse.json({
+      success: true,
+      modelUsed: modelUsed || requestedModel,
+      data: responsePayload,
+      ...responsePayload,
+    });
   } catch (error: any) {
     console.error('Error in /api/triage:', error);
     return NextResponse.json(

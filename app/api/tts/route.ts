@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Gnani.ai / Vachana language mapping
-export const GNANI_LANG_MAP: Record<string, string> = {
+// Kivi / Sarvam AI language mapping
+export const KIVI_LANG_MAP: Record<string, string> = {
   en: 'en-IN',
   hi: 'hi-IN',
   ta: 'ta-IN',
@@ -12,26 +12,27 @@ export const GNANI_LANG_MAP: Record<string, string> = {
   kn: 'kn-IN',
   ml: 'ml-IN',
   pa: 'pa-IN',
-  ur: 'ur-IN',
+  od: 'od-IN',
   hinglish: 'hi-IN',
 };
 
-// Available Gnani Timbre-v3.0 voices
-export const GNANI_VOICES = [
-  'Shivani',
-  'Avinash',
-  'Lakshmi',
-  'Kalpana',
-  'Shubham',
-  'Prakash',
-  'Devansh',
-  'Yashraj',
-  'Chetana',
-  'Vasudha',
-  'Harshad',
-  'Riyaa',
-  'Tarika',
+
+// Available Kivi / Sarvam neural voices for bulbul:v3
+export const KIVI_VOICES = [
+  'priya',
+  'shubh',
+  'ishita',
+  'kavya',
+  'neha',
+  'pooja',
+  'rohan',
+  'simran',
+  'amit',
+  'dev',
+  'aditya',
+  'ritu',
 ];
+
 
 /**
  * Fallback tone generator in case the network is completely unreachable
@@ -93,70 +94,81 @@ export async function POST(req: NextRequest) {
     }
 
     const apiKey =
-      process.env.GNANI_API_KEY ||
-      process.env.VACH_API_KEY ||
-      'vach_1ytE2CY5X2DHxShv54z8ABPKxYhx5pcjubtvY78lt9WURgwFnYGnEIX6sOonioVDS3K4xLgupRI7I9MOmFnFpmLvOF9hmr2M_99db5cdfbbc22a67a16bc656dd68a11c';
+      process.env.SARVAM_API_KEY ||
+      process.env.KIVI_API_KEY;
 
-    const mappedLang = GNANI_LANG_MAP[language] || GNANI_LANG_MAP[language.toLowerCase()] || 'en-IN';
-    const selectedVoice =
-      voice && GNANI_VOICES.includes(voice) ? voice : 'Shivani';
-
-    // Call Gnani.ai / Vachana Timbre TTS inference endpoint
-    const gnaniRes = await fetch('https://api.vachana.ai/api/v1/tts/inference', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key-ID': apiKey,
-      },
-      body: JSON.stringify({
-        text: text.trim(),
-        voice: selectedVoice,
-        model: 'timbre-v3.0',
-        language: mappedLang,
-        speed: typeof speed === 'number' ? Math.max(0.5, Math.min(2.0, speed)) : 1.0,
-        audio_config: {
-          container: 'wav',
-          encoding: 'linear_pcm',
-          sample_rate: 24000,
-        },
-      }),
-    });
-
-    if (gnaniRes.ok) {
-      const audioArrayBuffer = await gnaniRes.arrayBuffer();
-      const wavBuffer = Buffer.from(audioArrayBuffer);
-      const acceptHeader = req.headers.get('accept') || '';
-
-      if (acceptHeader.includes('application/json')) {
-        const base64Audio = `data:audio/wav;base64,${wavBuffer.toString('base64')}`;
-        return NextResponse.json({
-          success: true,
-          text,
-          voice: selectedVoice,
-          language: mappedLang,
-          engine: 'Gnani.ai Timbre v3.0 (Vachana)',
-          audioDurationSeconds: Math.ceil(wavBuffer.length / (24000 * 2)),
-          audioDataUrl: base64Audio,
-        });
-      }
-
-      return new NextResponse(new Uint8Array(wavBuffer), {
-        status: 200,
-        headers: {
-          'Content-Type': 'audio/wav',
-          'X-TTS-Engine': 'Gnani.ai Timbre v3.0',
-          'X-Gnani-Voice': selectedVoice,
-          'X-Gnani-Language': mappedLang,
-          'Content-Length': wavBuffer.length.toString(),
-          'Cache-Control': 'public, max-age=3600',
-        },
+    if (!apiKey) {
+      console.warn('No Kivi/Sarvam API key found, generating local fallback audio');
+      const duration = Math.max(2, Math.min(10, Math.ceil(text.split(/\s+/).length * 0.35)));
+      const fallbackBuffer = generateFallbackWav(text, duration);
+      return NextResponse.json({
+        success: true,
+        text,
+        voice: voice || 'priya',
+        engine: 'Kivi Voice (Fallback mode)',
+        audioDataUrl: `data:audio/wav;base64,${fallbackBuffer.toString('base64')}`,
       });
     }
 
-    const errorDetails = await gnaniRes.text();
-    console.warn(`Gnani TTS API returned status ${gnaniRes.status}:`, errorDetails);
+    const mappedLang = KIVI_LANG_MAP[language] || KIVI_LANG_MAP[language.toLowerCase()] || 'en-IN';
+    const selectedVoice =
+      voice && KIVI_VOICES.includes(voice.toLowerCase()) ? voice.toLowerCase() : 'priya';
 
-    // If Gnani API returned an error, fallback gracefully so clinical UI doesn't freeze
+    // Call Kivi / Sarvam AI TTS endpoint
+    const sarvamRes = await fetch('https://api.sarvam.ai/text-to-speech', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'api-subscription-key': apiKey,
+      },
+      body: JSON.stringify({
+        text: text.trim().slice(0, 2000), // Max allowed by model
+        language_code: mappedLang,
+        model: 'bulbul:v3',
+        speaker: selectedVoice,
+        pace: typeof speed === 'number' ? Math.max(0.5, Math.min(2.0, speed)) : 1.0,
+        speech_sample_rate: 24000,
+        output_audio_codec: 'wav',
+      }),
+    });
+
+    if (sarvamRes.ok) {
+      const data = await sarvamRes.json();
+      if (data.audios && data.audios.length > 0) {
+        const base64Audio = data.audios[0];
+        const wavBuffer = Buffer.from(base64Audio, 'base64');
+        const acceptHeader = req.headers.get('accept') || '';
+
+        if (acceptHeader.includes('application/json')) {
+          return NextResponse.json({
+            success: true,
+            text,
+            voice: selectedVoice,
+            language: mappedLang,
+            engine: 'Kivi Voice (Sarvam AI)',
+            audioDurationSeconds: Math.ceil(wavBuffer.length / (24000 * 2)),
+            audioDataUrl: `data:audio/wav;base64,${base64Audio}`,
+          });
+        }
+
+        return new NextResponse(new Uint8Array(wavBuffer), {
+          status: 200,
+          headers: {
+            'Content-Type': 'audio/wav',
+            'X-TTS-Engine': 'Kivi Voice (Sarvam AI)',
+            'X-Kivi-Voice': selectedVoice,
+            'X-Kivi-Language': mappedLang,
+            'Content-Length': wavBuffer.length.toString(),
+            'Cache-Control': 'public, max-age=3600',
+          },
+        });
+      }
+    }
+
+    const errorDetails = await sarvamRes.text();
+    console.warn(`Kivi / Sarvam TTS API returned status ${sarvamRes.status}:`, errorDetails);
+
+    // Fallback gracefully so clinical UI doesn't freeze
     const duration = Math.max(2, Math.min(10, Math.ceil(text.split(/\s+/).length * 0.35)));
     const fallbackBuffer = generateFallbackWav(text, duration);
     const acceptHeader = req.headers.get('accept') || '';
@@ -166,7 +178,7 @@ export async function POST(req: NextRequest) {
         success: true,
         text,
         voice: selectedVoice,
-        engine: 'Gnani.ai (Fallback mode)',
+        engine: 'Kivi Voice (Fallback mode)',
         audioDataUrl: `data:audio/wav;base64,${fallbackBuffer.toString('base64')}`,
       });
     }
@@ -175,15 +187,14 @@ export async function POST(req: NextRequest) {
       status: 200,
       headers: {
         'Content-Type': 'audio/wav',
-        'X-TTS-Engine': 'Gnani.ai Fallback Tone',
+        'X-TTS-Engine': 'Kivi Voice Fallback Tone',
       },
     });
   } catch (err: any) {
-    console.error('Gnani TTS Error:', err);
+    console.error('Kivi TTS Error:', err);
     return NextResponse.json(
-      { error: err.message || 'Failed to synthesize speech with Gnani.ai' },
+      { error: err.message || 'Failed to synthesize speech with Kivi Voice' },
       { status: 500 }
     );
   }
 }
-

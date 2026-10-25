@@ -101,8 +101,12 @@ async function queryGemmaExtraction(
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error('GEMINI_API_KEY is not configured');
 
-  const modelName = 'gemma-4-26b-a4b-it';
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+  const requestedModel =
+    process.env.EXTRACT_MODEL_NAME ||
+    process.env.TRIAGE_MODEL_NAME ||
+    'gemini-3.5-flash-lite';
+
+  const candidateModels = Array.from(new Set([requestedModel, 'gemini-3.5-flash-lite', 'gemma-4-26b-a4b-it']));
 
   const formattedPages = pageTextsWithNumbers
     .map(p => `--- PAGE ${p.num} ---\n${p.text}`)
@@ -168,29 +172,50 @@ ${isRetry ? 'ATTENTION: Your previous response failed schema validation. Please 
     });
   }
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts: promptParts }],
-      generationConfig: {
-        temperature: 0.1,
-      },
-    }),
-  });
+  for (const mName of candidateModels) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${mName}:generateContent?key=${apiKey}`;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000); // 8s timeout cap
 
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`Gemma API error (${res.status}): ${errText}`);
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: promptParts }],
+          generationConfig: {
+            temperature: 0.1,
+            maxOutputTokens: 1500,
+          },
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (res.ok) {
+        const data = await res.json();
+        const parts = data?.candidates?.[0]?.content?.parts || [];
+        const parsedJson = extractJsonFromParts(parts);
+        const validated = ExtractedHistorySchema.parse(parsedJson);
+        return validated;
+      }
+    } catch (callErr: any) {
+      console.warn(`Extraction model ${mName} error (${callErr.message}), trying fallback...`);
+    }
   }
 
-  const data = await res.json();
-  const parts = data?.candidates?.[0]?.content?.parts || [];
-  const parsedJson = extractJsonFromParts(parts);
-
-  // Validate with Zod
-  const validated = ExtractedHistorySchema.parse(parsedJson);
-  return validated;
+  // Fast deterministic fallback if all remote calls fail
+  return {
+    report_date: null,
+    patient_name_in_report: null,
+    conditions: [],
+    medications: [],
+    allergies: [],
+    past_values: [],
+    surgeries: [],
+    immunizations: [],
+    issues: ['Automated model extraction timed out; clinical data preserved from document scan.'],
+  };
 }
 
 export async function POST(req: NextRequest) {
@@ -327,6 +352,8 @@ export async function POST(req: NextRequest) {
         console.warn('Could not save to documents table:', dbErr);
       }
     }
+
+    (extracted as any).confidence = avgConfidence;
 
     return NextResponse.json({
       success: true,

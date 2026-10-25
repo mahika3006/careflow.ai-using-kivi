@@ -5,7 +5,7 @@ import { X, Mic, Sparkles, Activity, FileText, Zap, Loader2, ImageIcon, Clipboar
 import { useCareFlow } from '@/lib/store';
 import { processMultimodalIntake } from '@/lib/multimodal-ai';
 import { getUrgencyStyles } from '@/lib/triage-rules';
-import { GnaniAudioRecorder, speakWithGnani, stopGnaniSpeech } from '@/lib/audio/speech-services';
+import { KiviAudioRecorder, speakWithKivi, stopKiviSpeech } from '@/lib/audio/speech-services';
 import { Vitals, MediaEvidence, UrgencyCategory, TranscriptSegment } from '@/types';
 
 interface NewPatientModalProps {
@@ -77,7 +77,7 @@ export function NewPatientModal({ isOpen, onClose, onPatientCreated }: NewPatien
   const [audioTranscriptConfidence, setAudioTranscriptConfidence] = useState<number | null>(null);
 
   const [isPlayingTTS, setIsPlayingTTS] = useState(false);
-  const recorderRef = useRef<GnaniAudioRecorder | null>(null);
+  const recorderRef = useRef<KiviAudioRecorder | null>(null);
   const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [uploadedDocName, setUploadedDocName] = useState<string | null>(null);
   const [uploadedDocUrl, setUploadedDocUrl] = useState<string | null>(null);
@@ -110,7 +110,7 @@ export function NewPatientModal({ isOpen, onClose, onPatientCreated }: NewPatien
     if (symptomText.trim().length < 30) return;
     debounceTimerRef.current = setTimeout(() => {
       runLiveGemmaAnalysis(symptomText, vitalsObj, age || 40);
-    }, 2500);
+    }, 1000);
     return () => { if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symptomText, isOpen]);
@@ -186,7 +186,7 @@ export function NewPatientModal({ isOpen, onClose, onPatientCreated }: NewPatien
       setIsRecordingAudio(false);
       setIsTranscribingSTT(true);
       try {
-        if (!recorderRef.current) recorderRef.current = new GnaniAudioRecorder();
+        if (!recorderRef.current) recorderRef.current = new KiviAudioRecorder();
         const result = await recorderRef.current.stop(language, symptomText);
         setHasRecordedAudio(true);
         if (result.audioUrl) setRecordedAudioUrl(result.audioUrl);
@@ -206,14 +206,14 @@ export function NewPatientModal({ isOpen, onClose, onPatientCreated }: NewPatien
           setSymptomText(textWithTranscript);
         }
       } catch (err) {
-        console.warn('Gnani STT transcription warning:', err);
+        console.warn('Kivi STT transcription warning:', err);
         setHasRecordedAudio(true);
       } finally {
         setIsTranscribingSTT(false);
       }
     } else {
       try {
-        if (!recorderRef.current) recorderRef.current = new GnaniAudioRecorder();
+        if (!recorderRef.current) recorderRef.current = new KiviAudioRecorder();
         await recorderRef.current.start();
         setIsRecordingAudio(true);
         setRecordingSeconds(0);
@@ -255,17 +255,17 @@ export function NewPatientModal({ isOpen, onClose, onPatientCreated }: NewPatien
     }
   };
 
-  const handlePlayGnaniTTS = () => {
+  const handlePlayKiviTTS = () => {
     if (isPlayingTTS) {
-      stopGnaniSpeech();
+      stopKiviSpeech();
       setIsPlayingTTS(false);
       return;
     }
     const label = activeCategory === 'EMERGENCY' ? 'Possible emergency, clinician review needed.' : `${activeCategory} Priority Alert.`;
     const textToSpeak = `${label} ${activeExplanation}`;
-    speakWithGnani(textToSpeak, {
+    speakWithKivi(textToSpeak, {
       language,
-      voice: 'Shivani',
+      voice: 'priya',
       onStart: () => setIsPlayingTTS(true),
       onEnd: () => setIsPlayingTTS(false),
       onError: () => setIsPlayingTTS(false),
@@ -395,7 +395,7 @@ export function NewPatientModal({ isOpen, onClose, onPatientCreated }: NewPatien
       mediaList.push({
         id: 'MED-AUD-' + Date.now(),
         type: 'audio',
-        title: `Verbal Triage Statement (${language.toUpperCase()} - Gnani STT)`,
+        title: `Verbal Triage Statement (${language.toUpperCase()} - Kivi Voice STT)`,
         url: recordedAudioUrl || 'https://example.com/audio/intake.mp3',
         durationOrPages: recordedDurationStr,
         uploadedAt: new Date().toISOString(),
@@ -614,7 +614,7 @@ export function NewPatientModal({ isOpen, onClose, onPatientCreated }: NewPatien
                   ) : (
                     <>
                       <Mic className="w-3.5 h-3.5" />
-                      <span>{hasRecordedAudio ? `Audio Captured (${recordedDurationStr})` : 'Record Verbal Statement (Gnani STT)'}</span>
+                      <span>{hasRecordedAudio ? `Audio Captured (${recordedDurationStr})` : 'Record Verbal Statement (Kivi Voice STT)'}</span>
                     </>
                   )}
                 </button>
@@ -841,7 +841,7 @@ export function NewPatientModal({ isOpen, onClose, onPatientCreated }: NewPatien
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={handlePlayGnaniTTS}
+                  onClick={handlePlayKiviTTS}
                   className={'flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border transition-all ' + (isPlayingTTS ? 'bg-indigo-600 text-white border-indigo-700 animate-pulse' : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-300 shadow-sm')}
                 >
                   {isPlayingTTS ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />}

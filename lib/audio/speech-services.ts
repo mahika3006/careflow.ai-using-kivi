@@ -2,7 +2,7 @@ import { TranscriptSegment } from '@/types';
 
 let currentAudioElement: HTMLAudioElement | null = null;
 
-export interface GnaniSpeechOptions {
+export interface KiviSpeechOptions {
   language?: string;
   voice?: string;
   speed?: number;
@@ -11,24 +11,23 @@ export interface GnaniSpeechOptions {
   onError?: (err: any) => void;
 }
 
-// Backwards-compatible alias
-export type PiperSpeechOptions = GnaniSpeechOptions;
+export type PiperSpeechOptions = KiviSpeechOptions;
 
 /**
- * Plays text aloud using Gnani.ai Timbre neural voice engine with seamless browser fallback
+ * Plays text aloud using Kivi / Sarvam AI neural voice engine with seamless browser fallback
  */
-export async function speakWithGnani(
+export async function speakWithKivi(
   text: string,
-  options: GnaniSpeechOptions = {}
+  options: KiviSpeechOptions = {}
 ): Promise<void> {
-  stopGnaniSpeech();
+  stopKiviSpeech();
 
-  const { language = 'en', voice = 'Shivani', speed = 1.0, onStart, onEnd, onError } = options;
+  const { language = 'en', voice = 'priya', speed = 1.0, onStart, onEnd, onError } = options;
 
   try {
     onStart?.();
 
-    // 1. Call Gnani.ai TTS API endpoint
+    // 1. Call Kivi / Sarvam TTS API endpoint
     const res = await fetch('/api/tts', {
       method: 'POST',
       headers: {
@@ -55,7 +54,7 @@ export async function speakWithGnani(
         };
 
         audio.onerror = (e) => {
-          console.warn('Gnani audio playback error, falling back to speech synthesis:', e);
+          console.warn('Kivi audio playback error, falling back to speech synthesis:', e);
           fallbackSpeechSynthesis(text, language, onEnd);
         };
 
@@ -66,14 +65,13 @@ export async function speakWithGnani(
 
     fallbackSpeechSynthesis(text, language, onEnd);
   } catch (err: any) {
-    console.warn('Gnani TTS error, using browser speech engine:', err);
+    console.warn('Kivi TTS error, using browser speech engine:', err);
     onError?.(err);
     fallbackSpeechSynthesis(text, language, onEnd);
   }
 }
 
-// Export alias for seamless integration
-export const speakWithPiper = speakWithGnani;
+export const speakWithPiper = speakWithKivi;
 
 /**
  * Native SpeechSynthesis fallback tuned for Indian & international accents
@@ -102,29 +100,38 @@ function fallbackSpeechSynthesis(
     kn: 'kn-IN',
     ml: 'ml-IN',
     pa: 'pa-IN',
-    ur: 'ur-PK',
+    ur: 'ur-IN',
     en: 'en-IN',
   };
 
-  utterance.lang = langTagMap[language] || 'en-IN';
+  utterance.lang = langTagMap[language] || langTagMap[language.toLowerCase()] || 'en-IN';
   utterance.rate = 1.0;
   utterance.pitch = 1.0;
 
-  utterance.onend = () => {
-    onEnd?.();
-  };
+  // Attempt to select an Indian English or localized voice if available
+  const voices = window.speechSynthesis.getVoices();
+  const matchedVoice = voices.find(
+    (v) =>
+      v.lang.toLowerCase() === utterance.lang.toLowerCase() ||
+      v.lang.toLowerCase().startsWith(language.toLowerCase()) ||
+      v.name.toLowerCase().includes('india') ||
+      v.name.toLowerCase().includes('hindi')
+  );
 
-  utterance.onerror = () => {
-    onEnd?.();
-  };
+  if (matchedVoice) {
+    utterance.voice = matchedVoice;
+  }
+
+  utterance.onend = () => onEnd?.();
+  utterance.onerror = () => onEnd?.();
 
   window.speechSynthesis.speak(utterance);
 }
 
 /**
- * Stops any active Gnani audio playback
+ * Stops any active Kivi audio playback
  */
-export function stopGnaniSpeech(): void {
+export function stopKiviSpeech(): void {
   if (currentAudioElement) {
     try {
       currentAudioElement.pause();
@@ -140,8 +147,7 @@ export function stopGnaniSpeech(): void {
   }
 }
 
-// Export alias for seamless backwards compatibility
-export const stopPiperSpeech = stopGnaniSpeech;
+export const stopPiperSpeech = stopKiviSpeech;
 
 export interface STTResult {
   transcribedText: string;
@@ -195,9 +201,9 @@ function encodeWavBlob(samples: Float32Array, sampleRate: number): Blob {
 }
 
 /**
- * Records real microphone audio and transcribes it using Gnani.ai Prisma STT API
+ * Records real microphone audio and transcribes it using Kivi / Sarvam AI Saaras STT API
  */
-export class GnaniAudioRecorder {
+export class KiviAudioRecorder {
   private mediaRecorder: MediaRecorder | null = null;
   private audioContext: AudioContext | null = null;
   private mediaStream: MediaStream | null = null;
@@ -219,110 +225,138 @@ export class GnaniAudioRecorder {
         sampleRate: 16000,
         echoCancellation: true,
         noiseSuppression: true,
+        autoGainControl: true,
       },
     });
 
-    // 1. AudioContext capturing for pristine 16kHz WAV format (best for Gnani STT)
+    // 1. AudioContext capturing for pristine 16kHz WAV format (best for Kivi / Sarvam STT)
     try {
-      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-      if (AudioContextClass) {
-        this.audioContext = new AudioContextClass({ sampleRate: 16000 });
-        const source = this.audioContext.createMediaStreamSource(this.mediaStream);
-        this.scriptProcessor = this.audioContext.createScriptProcessor(4096, 1, 1);
-        this.scriptProcessor.onaudioprocess = (e) => {
-          const channel = e.inputBuffer.getChannelData(0);
-          this.pcmChunks.push(new Float32Array(channel));
-        };
-        source.connect(this.scriptProcessor);
-        this.scriptProcessor.connect(this.audioContext.destination);
-      }
-    } catch (e) {
-      console.warn('AudioContext recording initialization fallback:', e);
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      this.audioContext = new AudioCtx({ sampleRate: 16000 });
+      const source = this.audioContext.createMediaStreamSource(this.mediaStream);
+      this.scriptProcessor = this.audioContext.createScriptProcessor(4096, 1, 1);
+
+      this.scriptProcessor.onaudioprocess = (e) => {
+        const inputData = e.inputBuffer.getChannelData(0);
+        this.pcmChunks.push(new Float32Array(inputData));
+      };
+
+      source.connect(this.scriptProcessor);
+      this.scriptProcessor.connect(this.audioContext.destination);
+    } catch (ctxErr) {
+      console.warn('AudioContext recording fallback to MediaRecorder:', ctxErr);
     }
 
-    // 2. Also keep MediaRecorder active as browser fallback
+    // 2. Standard MediaRecorder as reliable secondary fallback
     try {
-      this.mediaRecorder = new MediaRecorder(this.mediaStream);
-      this.mediaRecorder.ondataavailable = (event) => {
-        if (event.data && event.data.size > 0) {
-          this.audioChunks.push(event.data);
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm')
+        ? 'audio/webm'
+        : 'audio/ogg';
+
+      this.mediaRecorder = new MediaRecorder(this.mediaStream, { mimeType });
+      this.mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          this.audioChunks.push(e.data);
         }
       };
       this.mediaRecorder.start(250);
-    } catch {}
+    } catch (mrErr) {
+      console.warn('MediaRecorder error:', mrErr);
+    }
   }
 
   async stop(language: string = 'en', hintText?: string): Promise<STTResult> {
-    // Stop tracks
-    if (this.mediaStream) {
-      this.mediaStream.getTracks().forEach((track) => track.stop());
-      this.mediaStream = null;
-    }
-
-    if (this.scriptProcessor) {
+    return new Promise((resolve, reject) => {
       try {
-        this.scriptProcessor.disconnect();
-      } catch {}
-      this.scriptProcessor = null;
-    }
+        // Disconnect audio processors
+        if (this.scriptProcessor) {
+          try {
+            this.scriptProcessor.disconnect();
+          } catch {}
+          this.scriptProcessor = null;
+        }
 
-    if (this.audioContext && this.audioContext.state !== 'closed') {
-      try {
-        await this.audioContext.close();
-      } catch {}
-      this.audioContext = null;
-    }
+        const handleAudioFinalization = async () => {
+          try {
+            let audioBlob: Blob;
 
-    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
-      try {
-        this.mediaRecorder.stop();
-      } catch {}
-    }
+            if (this.pcmChunks.length > 0) {
+              // Assemble WAV from PCM buffer
+              const totalLength = this.pcmChunks.reduce((acc, chunk) => acc + chunk.length, 0);
+              const mergedPcm = new Float32Array(totalLength);
+              let offset = 0;
+              for (const chunk of this.pcmChunks) {
+                mergedPcm.set(chunk, offset);
+                offset += chunk.length;
+              }
+              audioBlob = encodeWavBlob(mergedPcm, 16000);
+            } else if (this.audioChunks.length > 0) {
+              audioBlob = new Blob(this.audioChunks, {
+                type: this.mediaRecorder?.mimeType || 'audio/webm',
+              });
+            } else {
+              audioBlob = new Blob([], { type: 'audio/wav' });
+            }
 
-    let audioBlob: Blob;
-    // Check if we captured PCM samples for pristine WAV
-    if (this.pcmChunks.length > 0) {
-      const totalLength = this.pcmChunks.reduce((acc, c) => acc + c.length, 0);
-      const merged = new Float32Array(totalLength);
-      let offset = 0;
-      for (const chunk of this.pcmChunks) {
-        merged.set(chunk, offset);
-        offset += chunk.length;
+            const audioUrl = URL.createObjectURL(audioBlob);
+
+            // Cleanup stream
+            if (this.mediaStream) {
+              this.mediaStream.getTracks().forEach((track) => track.stop());
+              this.mediaStream = null;
+            }
+            if (this.audioContext && this.audioContext.state !== 'closed') {
+              try {
+                await this.audioContext.close();
+              } catch {}
+              this.audioContext = null;
+            }
+
+            // Send to /api/stt
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'patient_intake.wav');
+            formData.append('language', language);
+            if (hintText) formData.append('hintText', hintText);
+
+            const res = await fetch('/api/stt', {
+              method: 'POST',
+              body: formData,
+            });
+
+            if (!res.ok) {
+              throw new Error(`Kivi STT API responded with status ${res.status}`);
+            }
+
+            const data = await res.json();
+
+            resolve({
+              transcribedText: data.transcribedText,
+              detectedLanguage: data.detectedLanguage || language,
+              modelUsed: data.modelUsed || 'Kivi Voice (Sarvam AI Saaras v4)',
+              segments: data.segments || [],
+              audioBlob,
+              audioUrl,
+            });
+          } catch (err) {
+            reject(err);
+          }
+        };
+
+        if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+          this.mediaRecorder.onstop = () => {
+            handleAudioFinalization();
+          };
+          this.mediaRecorder.stop();
+        } else {
+          handleAudioFinalization();
+        }
+      } catch (err) {
+        this.cancel();
+        reject(err);
       }
-      audioBlob = encodeWavBlob(merged, 16000);
-    } else if (this.audioChunks.length > 0) {
-      audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
-    } else {
-      audioBlob = new Blob([], { type: 'audio/wav' });
-    }
-
-    const audioUrl = URL.createObjectURL(audioBlob);
-
-    // Send to /api/stt
-    const formData = new FormData();
-    formData.append('audio', audioBlob, 'patient_intake.wav');
-    formData.append('language', language);
-    if (hintText) formData.append('hintText', hintText);
-
-    const res = await fetch('/api/stt', {
-      method: 'POST',
-      body: formData,
     });
-
-    if (!res.ok) {
-      throw new Error(`Gnani STT API responded with status ${res.status}`);
-    }
-
-    const data = await res.json();
-
-    return {
-      transcribedText: data.transcribedText,
-      detectedLanguage: data.detectedLanguage || language,
-      modelUsed: data.modelUsed || 'Gnani.ai Prisma v2.5 STT',
-      segments: data.segments || [],
-      audioBlob,
-      audioUrl,
-    };
   }
 
   cancel(): void {
@@ -352,6 +386,4 @@ export class GnaniAudioRecorder {
   }
 }
 
-// Export alias for seamless backwards compatibility
-export const WhisperAudioRecorder = GnaniAudioRecorder;
-
+export const WhisperAudioRecorder = KiviAudioRecorder;

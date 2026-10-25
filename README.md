@@ -1,36 +1,84 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CareFlow.ai — Human-in-the-Loop Healthcare Triage Platform (Powered by Kivi Voice)
+
+CareFlow.ai is an intelligent, multimodal clinical triage and patient prioritization platform designed to assist doctors, triage nurses, and healthcare clinicians in real-time hospital and clinic environments.
+
+---
+
+## Key Capabilities
+
+- **Kivi Voice Multimodal Intake (STT & TTS)**:
+  - Powered by **Kivi Voice** (Sarvam AI Saaras v4 STT & Bulbul v3 TTS) for high-accuracy multilingual verbal patient statements and prescription audio playback in 11+ Indian languages (Hindi, English, Bengali, Tamil, Telugu, Marathi, Gujarati, Kannada, Malayalam, Punjabi, Odia).
+- **Sub-3s Clinical Urgency Safety Screening**:
+  - Accelerated clinical decision support engine providing observable urgency signals, grounding quotes from history and present symptoms, missing vitals checks, and life-saving first aid steps.
+- **Human-in-the-Loop Decision Support**:
+  - AI does not diagnose or make final decisions; clinicians review, confirm, or override triage priority ranks.
+- **Multimodal Document Understanding**:
+  - Instant PDF medical report narrative extraction (past conditions, active medications, allergies, previous vitals).
+- **Doctor Queue & Clinical Assignment**:
+  - Real-time triage queues, specialty routing, and printable consultation reports.
+
+---
+
+## Tech Stack
+
+- **Framework**: Next.js 16.4.2 (App Router with Turbopack)
+- **Language**: TypeScript 5
+- **Styling**: Tailwind CSS 4
+- **Voice Engine**: Kivi Voice / Sarvam AI SDK (`sarvamai`)
+- **AI Decision Support**: Google Gemini / Gemma AI Integration
+- **Database / Auth**: Supabase SSR Client
+
+---
 
 ## Getting Started
 
-First, run the development server:
+### 1. Prerequisites
+- Node.js 18+ (tested on Node v20+)
+- npm or yarn
+
+### 2. Environment Setup
+Create a `.env.local` file from `.env.example`:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# Kivi / Sarvam AI Speech Integration (STT & TTS)
+SARVAM_API_KEY=your_sarvam_api_key_here
+KIVI_API_KEY=your_kivi_api_key_here
+
+# Gemini / Gemma AI Integration
+GEMINI_API_KEY=your_gemini_api_key_here
+
+# Supabase Configuration
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key_here
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key_here
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 3. Install Dependencies
+```bash
+npm install
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 4. Run Development Server
+```bash
+npm run dev
+```
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+---
 
-## Learn More
+## Verification & Tests
 
-To learn more about Next.js, take a look at the following resources:
+To run the verification test suites:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **Kivi Voice Test**:
+  ```bash
+  node scripts/test_kivi_voice.mjs
+  ```
+- **Screening Speed Benchmark**:
+  ```bash
+  node scripts/benchmark_speed.mjs
+  ```
+- **Full Clinical Acceptance Suite (A–F)**:
+  ```bash
+  node scripts/run_acceptance_tests.mjs
+  ```

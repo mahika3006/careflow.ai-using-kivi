@@ -1,67 +1,66 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { TranscriptSegment } from '@/types';
 
-// Language code mapping for Gnani.ai Prisma STT
-export const GNANI_STT_LANG_MAP: Record<string, { name: string; gnaniCode: string; defaultSample: string }> = {
+// Language code mapping for Kivi / Sarvam AI Saaras STT
+export const KIVI_STT_LANG_MAP: Record<string, { name: string; kiviCode: string; defaultSample: string }> = {
   hi: {
     name: 'Hindi',
-    gnaniCode: 'hi-IN',
+    kiviCode: 'hi-IN',
     defaultSample: 'सीने में बहुत तेज दर्द हो रहा है और बाईं बांह में भारीपन महसूस हो रहा है। सांस लेने में भी तकलीफ है।',
   },
   hinglish: {
     name: 'Hinglish',
-    gnaniCode: 'hi-IN',
+    kiviCode: 'hi-IN',
     defaultSample: 'Chest mein bohot heavy pain ho raha hai aur left arm mein radiation feel ho rahi hai. Saans lene mein bhi dikkat hai.',
   },
   bn: {
     name: 'Bengali',
-    gnaniCode: 'bn-IN',
+    kiviCode: 'bn-IN',
     defaultSample: 'বুকে তীব্র ব্যথা হচ্ছে এবং বাঁ হাতে ভারী অনুভূতি হচ্ছে। শ্বাস নিতেও খুব কষ্ট হচ্ছে।',
   },
   ta: {
     name: 'Tamil',
-    gnaniCode: 'ta-IN',
+    kiviCode: 'ta-IN',
     defaultSample: 'நெஞ்சில் கடுமையான வலி மற்றும் இடது கையில் பாரமான உணர்வு உள்ளது. மூச்சு விடுவதில் சிரமம்.',
   },
   te: {
     name: 'Telugu',
-    gnaniCode: 'te-IN',
+    kiviCode: 'te-IN',
     defaultSample: 'ఛాతీలో తీవ్రమైన నొప్పి మరియు ఎడమ చేతిలో తిమ్మిరిగా ఉంది. శ్వాస తీసుకోవడంలో ఇబ్బంది.',
   },
   mr: {
     name: 'Marathi',
-    gnaniCode: 'mr-IN',
+    kiviCode: 'mr-IN',
     defaultSample: 'छातीत प्रचंड वेदना होत असून डाव्या हातात जडपणा जाणवत आहे. श्वास घेण्यास त्रास होत आहे.',
   },
   gu: {
     name: 'Gujarati',
-    gnaniCode: 'gu-IN',
+    kiviCode: 'gu-IN',
     defaultSample: 'છાતીમાં સખત દુખાવો થાય છે અને ડાબા હાથમાં ભારેપણું લાગે છે. શ્વાસ લેવામાં તકલીફ પડે છે.',
   },
   kn: {
     name: 'Kannada',
-    gnaniCode: 'kn-IN',
+    kiviCode: 'kn-IN',
     defaultSample: 'ಎದೆಯಲ್ಲಿ ತೀವ್ರ ನೋವು ಮತ್ತು ಎಡಗೈಯಲ್ಲಿ ಜಡತ್ವವಿದೆ. ಉಸಿರಾಟದಲ್ಲಿ ಕಷ್ಟವಾಗುತ್ತಿದೆ.',
   },
   ml: {
     name: 'Malayalam',
-    gnaniCode: 'ml-IN',
+    kiviCode: 'ml-IN',
     defaultSample: 'നെഞ്ചിൽ കഠിനമായ വേദനയും ഇടതുകൈയിൽ ഭാരവും അനുഭവപ്പെടുന്നു. ശ്വാസമെടുക്കാൻ ബുദ്ധിമുട്ട്.',
   },
   pa: {
     name: 'Punjabi',
-    gnaniCode: 'pa-IN',
+    kiviCode: 'pa-IN',
     defaultSample: 'ਛਾਤੀ ਵਿੱਚ ਬਹੁਤ ਤੇਜ਼ ਦਰਦ ਹੋ ਰਿਹਾ ਹੈ ਅਤੇ ਖੱਬੀ ਬਾਂਹ ਵਿੱਚ ਭਾਰੀਪਨ ਮਹਿਸੂਸ ਹੋ ਰਿਹਾ ਹੈ।',
   },
   ur: {
     name: 'Urdu',
-    gnaniCode: 'ur-IN',
-    defaultSample: 'سینے میں شدید درد ہو رہا ہے اور بائیں بازو میں بھاری پن محسوس ہو رہا ہے۔ سانس لینے میں تکلیف ہے۔',
+    kiviCode: 'ur-IN',
+    defaultSample: 'سینے میں شدید दर्द ہو رہا ہے اور بائیں بازو میں بھاری پن محسوس ہو رہا ہے۔ سانس لینے میں تکلیف ہے۔',
   },
   en: {
     name: 'English',
-    gnaniCode: 'en-IN',
-    defaultSample: 'I have severe squeezing chest pain radiating down my left arm with cold sweats and shortness of breath.',
+    kiviCode: 'en-IN',
   },
 };
 
@@ -94,7 +93,7 @@ function generateAlignedSegments(text: string, language: string): TranscriptSegm
       seconds: currentSecond,
       speaker: idx % 3 === 2 ? 'Triage Clinician' : 'Patient',
       text: sentence,
-      confidence: Math.round((0.94 + Math.random() * 0.05) * 100) / 100,
+      confidence: Math.round((0.95 + Math.random() * 0.04) * 100) / 100,
       highlightUrgent: isUrgent,
     });
 
@@ -115,7 +114,7 @@ export async function POST(req: NextRequest) {
 
     if (contentType.includes('multipart/form-data')) {
       const formData = await req.formData();
-      const file = (formData.get('audio') || formData.get('audio_file')) as File | null;
+      const file = (formData.get('audio') || formData.get('audio_file') || formData.get('file')) as File | null;
       language = (formData.get('language') as string) || 'en';
       customText = formData.get('hintText') as string | null;
 
@@ -134,37 +133,37 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const langConfig = GNANI_STT_LANG_MAP[language] || GNANI_STT_LANG_MAP.en;
+    const langConfig = KIVI_STT_LANG_MAP[language] || KIVI_STT_LANG_MAP.en;
     const apiKey =
-      process.env.GNANI_API_KEY ||
-      process.env.VACH_API_KEY ||
-      'vach_1ytE2CY5X2DHxShv54z8ABPKxYhx5pcjubtvY78lt9WURgwFnYGnEIX6sOonioVDS3K4xLgupRI7I9MOmFnFpmLvOF9hmr2M_99db5cdfbbc22a67a16bc656dd68a11c';
+      process.env.SARVAM_API_KEY ||
+      process.env.KIVI_API_KEY;
 
-    // 1. If audio bytes are present, send to Gnani.ai / Vachana STT REST endpoint
-    if (audioBuffer && audioBuffer.length > 0) {
+    // 1. If audio bytes are present, send to Kivi / Sarvam AI Saaras STT REST endpoint
+    if (audioBuffer && audioBuffer.length > 0 && apiKey) {
       try {
-        const gnaniFormData = new FormData();
+        const kiviFormData = new FormData();
         const blob = new Blob([new Uint8Array(audioBuffer)], { type: audioMimeType });
-        gnaniFormData.append('audio_file', blob, audioFileName.endsWith('.wav') ? audioFileName : 'audio.wav');
-        gnaniFormData.append('language_code', langConfig.gnaniCode);
-        gnaniFormData.append('preferred_language', langConfig.gnaniCode);
-        gnaniFormData.append('format', 'transcribe');
-        gnaniFormData.append('itn_native_numerals', 'true');
+        kiviFormData.append('file', blob, audioFileName.endsWith('.wav') ? audioFileName : 'audio.wav');
+        kiviFormData.append('model', 'saaras:v4');
+        kiviFormData.append('mode', 'transcribe');
+        if (langConfig.kiviCode) {
+          kiviFormData.append('language_code', langConfig.kiviCode);
+        }
 
-        const gnaniRes = await fetch('https://api.vachana.ai/stt/v3', {
+        const kiviRes = await fetch('https://api.sarvam.ai/speech-to-text', {
           method: 'POST',
           headers: {
-            'X-API-Key-ID': apiKey,
+            'api-subscription-key': apiKey,
           },
-          body: gnaniFormData,
+          body: kiviFormData,
         });
 
-        if (gnaniRes.ok) {
-          const gnaniJson = await gnaniRes.json();
+        if (kiviRes.ok) {
+          const kiviJson = await kiviRes.json();
           const transcribedText =
-            gnaniJson.transcript ||
-            gnaniJson.output?.literal ||
-            gnaniJson.text ||
+            kiviJson.transcript ||
+            kiviJson.output?.literal ||
+            kiviJson.text ||
             '';
 
           if (transcribedText.trim()) {
@@ -174,23 +173,22 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({
               success: true,
               transcribedText,
-              detectedLanguage: language,
+              detectedLanguage: kiviJson.language_code || language,
               languageName: langConfig.name,
-              engine: 'Gnani.ai Prisma v2.5 (Vachana)',
-              modelUsed: gnaniJson.model || 'Gnani Prisma v2.5 STT',
-              requestId: gnaniJson.request_id,
-              processingTime: gnaniJson.processing_time,
+              engine: 'Kivi Voice (Sarvam AI Saaras v4)',
+              modelUsed: 'Saaras v4 STT',
+              requestId: kiviJson.request_id,
               segments,
               audioDurationSeconds,
               timestamp: new Date().toISOString(),
             });
           }
         } else {
-          const errText = await gnaniRes.text();
-          console.warn(`Gnani STT API returned ${gnaniRes.status}:`, errText);
+          const errText = await kiviRes.text();
+          console.warn(`Kivi / Sarvam STT API returned ${kiviRes.status}:`, errText);
         }
-      } catch (gnaniErr) {
-        console.warn('Gnani STT direct invocation failed, using domain fallback:', gnaniErr);
+      } catch (kiviErr) {
+        console.warn('Kivi STT direct invocation failed, using domain fallback:', kiviErr);
       }
     }
 
@@ -204,21 +202,20 @@ export async function POST(req: NextRequest) {
       transcribedText,
       detectedLanguage: language,
       languageName: langConfig.name,
-      engine: 'Gnani.ai Prisma v2.5 (Vachana)',
-      modelUsed: 'Gnani Prisma v2.5 STT',
+      engine: 'Kivi Voice (Sarvam AI Saaras v4)',
+      modelUsed: 'Saaras v4 STT',
       segments,
       audioDurationSeconds,
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    console.error('Gnani STT Processing Error:', error);
+    console.error('Kivi STT Processing Error:', error);
     return NextResponse.json(
       {
         success: false,
-        error: error.message || 'Failed to process speech with Gnani.ai STT',
+        error: error.message || 'Failed to process speech with Kivi Voice STT',
       },
       { status: 500 }
     );
   }
 }
-

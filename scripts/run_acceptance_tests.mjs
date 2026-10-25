@@ -75,12 +75,13 @@ let passed = 0;
 let total = 6;
 
 function assert(name, cond, detail = '') {
-  if (cond) {
+  const isOk = Boolean(cond);
+  if (isOk) {
     console.log(`  ✅ ${name}`);
   } else {
     console.log(`  ❌ ${name}${detail ? ' — ' + detail : ''}`);
   }
-  return cond;
+  return isOk;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

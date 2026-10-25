@@ -33,7 +33,7 @@ import { useCareFlow } from '@/lib/store';
 import { UrgencyCategory, Patient } from '@/types';
 import { getUrgencyStyles, isOverdue } from '@/lib/triage-rules';
 import { generatePrintableReportHtml } from '@/lib/reports';
-import { speakWithGnani, stopGnaniSpeech } from '@/lib/audio/speech-services';
+import { speakWithKivi, stopKiviSpeech } from '@/lib/audio/speech-services';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 
 interface PatientDetailViewProps {
@@ -84,21 +84,21 @@ export function PatientDetailView({ patientId, onBack, onOpenDoctorWorkspace }: 
   const [showReadmitModal, setShowReadmitModal] = useState(false);
   const [readmitReason, setReadmitReason] = useState('');
 
-  // Gnani Neural TTS states
+  // Kivi Voice Neural TTS states
   const [isPlayingTriageTTS, setIsPlayingTriageTTS] = useState(false);
   const [isPlayingRxTTS, setIsPlayingRxTTS] = useState(false);
 
   const handlePlayTriageTTS = () => {
     if (isPlayingTriageTTS) {
-      stopGnaniSpeech();
+      stopKiviSpeech();
       setIsPlayingTriageTTS(false);
       return;
     }
     const flags = patient?.aiAssessment?.warningFlags?.map((f) => `${f.flag}: ${f.evidence}`).join('. ') || '';
     const textToSpeak = `Patient ${patient?.name || ''}, ${patient?.age || ''} years old. Triage category: ${effectiveCategory}. ${patient?.aiAssessment?.structuredSummary || ''}. Warning flags: ${flags}`;
-    speakWithGnani(textToSpeak, {
+    speakWithKivi(textToSpeak, {
       language: patient?.originalLanguage || 'en',
-      voice: 'Shivani',
+      voice: 'priya',
       onStart: () => setIsPlayingTriageTTS(true),
       onEnd: () => setIsPlayingTriageTTS(false),
       onError: () => setIsPlayingTriageTTS(false),
@@ -107,16 +107,16 @@ export function PatientDetailView({ patientId, onBack, onOpenDoctorWorkspace }: 
 
   const handlePlayPrescriptionTTS = () => {
     if (isPlayingRxTTS) {
-      stopGnaniSpeech();
+      stopKiviSpeech();
       setIsPlayingRxTTS(false);
       return;
     }
     const rxs = patient?.consultation?.prescriptions?.map((rx) => `${rx.drugName}, ${rx.dosage}, ${rx.frequency}. Instructions: ${rx.instructions}`).join('. ') || 'No medications prescribed';
     const notes = patient?.consultation?.clinicalAssessment || '';
     const textToSpeak = `Doctor consultation instructions for ${patient?.name || ''}. Assessment: ${notes}. Prescriptions: ${rxs}`;
-    speakWithGnani(textToSpeak, {
+    speakWithKivi(textToSpeak, {
       language: patient?.originalLanguage || 'en',
-      voice: 'Shivani',
+      voice: 'priya',
       onStart: () => setIsPlayingRxTTS(true),
       onEnd: () => setIsPlayingRxTTS(false),
       onError: () => setIsPlayingRxTTS(false),
@@ -594,7 +594,7 @@ export function PatientDetailView({ patientId, onBack, onOpenDoctorWorkspace }: 
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-[9px] font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                              Gnani.ai Prisma STT Aligned
+                              Kivi Voice Saaras STT Aligned
                             </span>
                             <span className="text-[10px] text-slate-400 font-mono">
                               {media.durationOrPages}
@@ -736,10 +736,10 @@ export function PatientDetailView({ patientId, onBack, onOpenDoctorWorkspace }: 
                       ? 'bg-indigo-600 text-white border-indigo-700 animate-pulse'
                       : 'bg-white text-slate-700 border-slate-300 hover:border-indigo-400 shadow-2xs'
                   }`}
-                  title="Play audio via Gnani.ai neural TTS"
+                  title="Play audio via Kivi Voice neural TTS"
                 >
                   {isPlayingTriageTTS ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5 text-indigo-600" />}
-                  <span>{isPlayingTriageTTS ? 'Stop Voice' : 'Listen (Gnani TTS)'}</span>
+                  <span>{isPlayingTriageTTS ? 'Stop Voice' : 'Listen (Kivi Voice)'}</span>
                 </button>
                 <span className={`text-[10px] font-mono px-2 py-0.5 rounded border font-bold ${
                   patient.aiAssessment?.modelVersion?.toLowerCase().includes('gemma')
@@ -1036,10 +1036,10 @@ export function PatientDetailView({ patientId, onBack, onOpenDoctorWorkspace }: 
                         ? 'bg-indigo-600 text-white border-indigo-700 animate-pulse'
                         : 'bg-white text-slate-700 border-slate-300 hover:border-indigo-400 shadow-2xs'
                     }`}
-                    title="Listen to prescription & instructions via Gnani TTS"
+                    title="Listen to prescription & instructions via Kivi Voice"
                   >
                     {isPlayingRxTTS ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5 text-indigo-600" />}
-                    <span>{isPlayingRxTTS ? 'Stop Voice' : 'Listen Rx (Gnani TTS)'}</span>
+                    <span>{isPlayingRxTTS ? 'Stop Voice' : 'Listen Rx (Kivi Voice)'}</span>
                   </button>
                 )}
                 {patient.assignedDoctorName && (
